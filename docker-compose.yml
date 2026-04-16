@@ -1,0 +1,128 @@
+services:
+  mariadb:
+    image: mariadb:10.11
+    container_name: wp_mariadb
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      TZ: ${TZ}
+    command:
+      - --max-connections=200
+      - --innodb-buffer-pool-size=256M
+      - --innodb-log-file-size=128M
+      - --query-cache-type=0
+      - --query-cache-size=0
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - ./data/db:/var/lib/mysql
+    networks:
+      - wpnet
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: wp_redis
+    restart: unless-stopped
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - ./data/redis:/data
+    networks:
+      - wpnet
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+
+  wordpress:
+    image: wordpress:php8.2-apache
+    container_name: wp_app
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      WORDPRESS_DB_HOST: mariadb:3306
+      WORDPRESS_DB_NAME: ${MYSQL_DATABASE}
+      WORDPRESS_DB_USER: ${MYSQL_USER}
+      WORDPRESS_DB_PASSWORD: ${MYSQL_PASSWORD}
+      WORDPRESS_TABLE_PREFIX: ${WORDPRESS_TABLE_PREFIX}
+      TZ: ${TZ}
+      # FIX: usar $$ para escapar el signo $ de PHP.
+      # Docker Compose interpola $VAR → variable de entorno.
+      # $$ produce un $ literal, por eso $$_SERVER llega a PHP como $_SERVER.
+      WORDPRESS_CONFIG_EXTRA: |
+        define('WP_HOME', '${WP_HOME_URL}');
+        define('WP_SITEURL', '${WP_HOME_URL}');
+        if (isset($$_SERVER['HTTP_X_FORWARDED_PROTO']) && $$_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+            $$_SERVER['HTTPS'] = 'on';
+        }
+        define('DISALLOW_FILE_EDIT', true);
+    volumes:
+      - ./data/wordpress:/var/www/html
+      - ./php/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:ro
+      - ./data/logs/wordpress:/var/log/wordpress
+    networks:
+      - wpnet
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-s", "-o", "/dev/null", "http://localhost/wp-login.php"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: wp_nginx
+    restart: unless-stopped
+    depends_on:
+      wordpress:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.local.conf:/etc/nginx/nginx.conf:ro
+      - ./data/wordpress:/var/www/html:ro
+      - ./data/logs/nginx:/var/log/nginx
+    networks:
+      - wpnet
+
+  backup:
+    build:
+      context: .
+      dockerfile: backup/Dockerfile
+    env_file: .env
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      TZ: ${TZ}
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      wordpress:
+        condition: service_started
+    volumes:
+      - ./data/backups:/backups
+      - ./data/wordpress:/var/www/html:ro
+      - ./data/logs/backup:/logs
+    networks:
+      - wpnet
+    entrypoint: ["/bin/sh", "-c", "echo '[INFO] Backup tool ready. Use docker compose run --rm backup /backup.sh'; tail -f /dev/null"]
+    restart: "no"
+
+networks:
+  wpnet:
+    driver: bridge

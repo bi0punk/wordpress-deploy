@@ -1,0 +1,6 @@
+Agrega esto a wp-config.php cuando instales el plugin Redis Object Cache:
+
+define('WP_REDIS_HOST', 'redis');
+define('WP_REDIS_PORT', 6379);
+define('WP_CACHE', true);
+define('DISALLOW_FILE_EDIT', true);
