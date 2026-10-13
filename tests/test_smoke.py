@@ -3,7 +3,6 @@
 No levanta contenedores; solo verifica sintaxis y presencia de variables.
 """
 from pathlib import Path
-from shutil import which
 
 import pytest
 
