@@ -169,7 +169,7 @@ Variables en `.env` (ver `.env.example`):
 
 ## Tests / CI
 
-Smoke tests (sin Docker ni contenedores) que validan sintaxis del compose, presencia de `.env.example` y reglas de seguridad de Redis (sin `bind 127.0.0.1`, sin `requirepass` en el `.conf`, password expandida al arrancar y healthcheck autenticado):
+Smoke tests (sin Docker ni contenedores) que validan sintaxis del compose, presencia de `.env.example` y reglas de seguridad de Redis (sin `bind 127.0.0.1`, sin `requirepass` en el `.conf`, password interpolada por Compose al arrancar y healthcheck autenticado):
 
 ```bash
 uv venv && source .venv/bin/activate
@@ -184,7 +184,7 @@ pytest -q
 
 ## Seguridad
 
-- **Redis:** password obligatoria, inyectada como `--requirepass` desde `REDIS_PASSWORD` al arrancar el contenedor (el `.conf` no la define porque `redis-server` no expande variables de entorno) + red interna `wpnet` (sin `ports:` publicado al host). El `bind 0.0.0.0` es intencional y seguro: dentro del contenedor debe escuchar en todas las interfaces para que WordPress (otro contenedor) lo alcance por `redis:6379`; la aislación del host la da Docker, no el `bind`.
+- **Redis:** password obligatoria, inyectada como `--requirepass` desde `REDIS_PASSWORD` al arrancar el contenedor (el `.conf` no la define porque `redis-server` no expande variables de entorno); el comando conserva el entrypoint oficial de la imagen, que arranca `redis-server` como usuario `redis` (no como root) + red interna `wpnet` (sin `ports:` publicado al host). El `bind 0.0.0.0` es intencional y seguro: dentro del contenedor debe escuchar en todas las interfaces para que WordPress (otro contenedor) lo alcance por `redis:6379`; la aislación del host la da Docker, no el `bind`.
 - **MariaDB:** sin puerto publicado; solo accesible en `wpnet`.
 - **Nginx:** único punto de entrada (`8080`). Para producción, sumá TLS (certificados en `nginx/`) y proxy front-end.
 - `DISALLOW_FILE_EDIT` activo en WordPress (editor de plugins deshabilitado).

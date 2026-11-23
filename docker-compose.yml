@@ -32,12 +32,13 @@ services:
     image: redis:7-alpine
     container_name: wp_redis
     restart: unless-stopped
-    # `$$` evita que Compose interpole la variable: el shell del contenedor
-    # la expande y redis-server recibe la password real vía --requirepass.
+    # Compose interpola la password y el entrypoint oficial de la imagen
+    # arranca redis-server con el usuario `redis` (sin ejecutar como root).
     command:
-      - sh
-      - -c
-      - exec redis-server /usr/local/etc/redis/redis.conf --requirepass "$$REDIS_PASSWORD"
+      - redis-server
+      - /usr/local/etc/redis/redis.conf
+      - --requirepass
+      - ${REDIS_PASSWORD:-changeme}
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme}
     volumes:

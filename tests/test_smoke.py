@@ -56,7 +56,9 @@ def test_redis_password_passed_via_command():
     """La password debe llegar expandida al redis-server del contenedor."""
     compose = (REPO / "docker-compose.yml").read_text()
     assert "--requirepass" in compose, "redis no recibe --requirepass"
-    assert "$$REDIS_PASSWORD" in compose, "usar $$ para expandir en el contenedor, no en Compose"
+    assert "${REDIS_PASSWORD:-changeme}" in compose, (
+        "Compose debe interpolar REDIS_PASSWORD al arrancar redis"
+    )
 
 
 def test_redis_healthcheck_uses_auth():
