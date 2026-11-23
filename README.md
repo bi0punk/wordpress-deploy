@@ -40,7 +40,7 @@ flowchart TD
   H[Host :8080] --> N[Nginx 1.27-alpine]
   N -->|proxy + estáticos ro| W[WordPress php8.2-apache]
   W -->|P 3306| M[MariaDB 10.11]
-  W -->|P 6379 redis:6379| R[Redis 7-alpine - requirepass + AOF]
+  W -->|P 6379 redis:6379| R[Redis 7-alpine - password por env + AOF]
   B[backup /backup.sh] -->|mariadb-dump + tar wp-content| M
   B -->|salida>7 días| DEL[elimina backups viejos]
   subgraph wpnet[red bridge wpnet]
@@ -77,7 +77,7 @@ wordpress-deploy/
 ├── php/
 │   └── uploads.ini          # Config PHP (uploads, memory, opcache)
 ├── redis/
-│   └── redis.conf           # requirepass + AOF
+│   └── redis.conf           # bind + AOF (password vía command)
 ├── backup/
 │   └── Dockerfile           # Imagen con mariadb-client + tar
 ├── scripts/
@@ -169,7 +169,7 @@ Variables en `.env` (ver `.env.example`):
 
 ## Tests / CI
 
-Smoke tests que validan sintaxis del compose, presencia de `.env.example` y reglas de seguridad de Redis (sin `bind 127.0.0.1`, healthcheck autenticado):
+Smoke tests (sin Docker ni contenedores) que validan sintaxis del compose, presencia de `.env.example` y reglas de seguridad de Redis (sin `bind 127.0.0.1`, sin `requirepass` en el `.conf`, password expandida al arrancar y healthcheck autenticado):
 
 ```bash
 uv venv && source .venv/bin/activate
@@ -180,11 +180,11 @@ pytest -q
 `.github/workflows/ci.yml` valida:
 - `docker compose config` parsea sin errores
 - Shellcheck sobre `scripts/*.sh`
-- Smoke tests de `tests/`
+- Smoke tests de `tests/` (instala `pytest` + `pyyaml` y ejecuta `pytest -q`)
 
 ## Seguridad
 
-- **Redis:** `requirepass` obligatorio + red interna `wpnet` (sin `ports:` publicado al host). El `bind 0.0.0.0` es intencional y seguro: dentro del contenedor debe escuchar en todas las interfaces para que WordPress (otro contenedor) lo alcance por `redis:6379`; la aislación del host la da Docker, no el `bind`.
+- **Redis:** password obligatoria, inyectada como `--requirepass` desde `REDIS_PASSWORD` al arrancar el contenedor (el `.conf` no la define porque `redis-server` no expande variables de entorno) + red interna `wpnet` (sin `ports:` publicado al host). El `bind 0.0.0.0` es intencional y seguro: dentro del contenedor debe escuchar en todas las interfaces para que WordPress (otro contenedor) lo alcance por `redis:6379`; la aislación del host la da Docker, no el `bind`.
 - **MariaDB:** sin puerto publicado; solo accesible en `wpnet`.
 - **Nginx:** único punto de entrada (`8080`). Para producción, sumá TLS (certificados en `nginx/`) y proxy front-end.
 - `DISALLOW_FILE_EDIT` activo en WordPress (editor de plugins deshabilitado).

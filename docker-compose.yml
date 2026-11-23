@@ -32,7 +32,12 @@ services:
     image: redis:7-alpine
     container_name: wp_redis
     restart: unless-stopped
-    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    # `$$` evita que Compose interpole la variable: el shell del contenedor
+    # la expande y redis-server recibe la password real vía --requirepass.
+    command:
+      - sh
+      - -c
+      - exec redis-server /usr/local/etc/redis/redis.conf --requirepass "$$REDIS_PASSWORD"
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme}
     volumes:
@@ -41,7 +46,7 @@ services:
     networks:
       - wpnet
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "$REDIS_PASSWORD", "ping"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
       interval: 20s
       timeout: 5s
       retries: 10
